@@ -11,7 +11,30 @@ version: v1.0
 """
 import numpy as np
 import utils.utils as utils
+import scipy.linalg
 
+def divergence(class1, class2):
+    """compute a vector of 1-D divergences
+    
+    class1 - data matrix for class 1, each row is a sample
+    class2 - data matrix for class 2
+    
+    returns: d12 - a vector of 1-D divergence scores
+    """
+
+    # Compute the mean and variance of each feature vector element
+    m1 = np.mean(class1, axis=0)
+    m2 = np.mean(class2, axis=0)
+    v1 = np.var(class1, axis=0)
+    v2 = np.var(class2, axis=0)
+
+    # Plug mean and variances into the formula for 1-D divergence.
+    # (Note that / and * are being used to compute multiple 1-D
+    #  divergences without the need for a loop)
+    
+    d12 = 0.5 * (v1 / v2 + v2 / v1 - 2) + 0.5 * ( m1 - m2 ) * (m1 - m2) * (1.0 / v1 + 1.0 / v2)
+
+    return d12
 
 def reduce_dimensions(feature_vectors_full, model):
     """Dummy methods that just takes 1st 10 pixels.
@@ -22,6 +45,33 @@ def reduce_dimensions(feature_vectors_full, model):
     model - a dictionary storing the outputs of the model
        training stage
     """
+
+    covx = np.cov(feature_vectors_full, rowvar=0)
+    N = covx.shape[0]
+    w, v = scipy.linalg.eigh(covx, eigvals=(N - 2340, N - 1))
+    v = np.fliplr(v)
+    
+    pcatrain_data = np.dot((feature_vectors_full - np.mean(feature_vectors_full)), v)
+    
+    reconstructed = np.dot(pcatrain_data, v.transpose()) + np.mean(feature_vectors_full)
+    
+    divergences = []
+    sorted_indexes = []
+
+    for i in range (1,29):
+        for j in range (1,29):
+            first = pcatrain_data[feature_vectors_full[0, :] == i, :]
+            second = pcatrain_data[feature_vectors_full[0, :] == j, :]
+        d12 = divergence(first, second)
+        divergences.append(d12)
+        
+    sorted_indexes = np.zeros(40)
+    for index in divergences:
+        sorted_indexes += index
+
+    sorted_indexes = np.argsort(-sorted_indexes)
+    features = sorted_indexes[1:11]
+    
     return feature_vectors_full[:, 0:10]
 
 
@@ -123,6 +173,7 @@ def classify_page(page, model):
     """
     fvectors_train = np.array(model["fvectors_train"])
     labels_train = np.array(model["labels_train"])
+    
     return np.repeat(labels_train[0], len(page))
 
 
