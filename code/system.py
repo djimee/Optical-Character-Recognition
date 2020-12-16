@@ -171,7 +171,8 @@ def process_training_data(train_page_names):
     model_data["features"] = features.tolist()
 
     # find feature vectors corresponding to the best features in pcatrain_data and input into model
-    model_data["fvectors_train"] = pcatrain_data[:, features].tolist()
+    pcatrain_data_features = pcatrain_data[:, features]
+    model_data["fvectors_train"] = pcatrain_data_features.tolist()
 
     return model_data
 
