@@ -36,8 +36,25 @@ def divergence(class1, class2):
 
     return d12
 
+def calculate_principal_components(train_data, countPC):
+    """Method to calculate the the principal components
+
+    Params:
+    train_data - training data feature vectors stored as 
+        rows in a matrix
+    countPC - number of principal components to
+    """
+    
+    # computing the principal components of the first 40 components
+    covx = np.cov(train_data, rowvar=0)
+    N = covx.shape[0]
+    w, v = scipy.linalg.eigh(covx, eigvals=(N - countPC, N - 1))
+    v = np.fliplr(v)
+
+    return v
+
 def reduce_dimensions(feature_vectors_full, model):
-    """Dummy methods that just takes 1st 10 pixels.
+    """Reduces the dimensions by finding the 10 best features.
 
     Params:
     feature_vectors_full - feature vectors stored as rows
@@ -45,42 +62,39 @@ def reduce_dimensions(feature_vectors_full, model):
     model - a dictionary storing the outputs of the model
        training stage
     """
+    # extract training labels from the model
+    train_labels = np.array(model["labels_train"])
 
-    covx = np.cov(feature_vectors_full, rowvar=0)
-    N = covx.shape[0]
-    w, v = scipy.linalg.eigh(covx, eigvals=(N - 2340, N - 1))
-    v = np.fliplr(v)
-    
-    pcatrain_data = np.dot((feature_vectors_full - np.mean(feature_vectors_full)), v)
-    
-    reconstructed = np.dot(pcatrain_data, v.transpose()) + np.mean(feature_vectors_full)
-    
+    # feature selection algorithm
     divergences = []
     sorted_indexes = []
 
-    for i in range (1,29):
-        for j in range (1,29):
-            first = pcatrain_data[feature_vectors_full[0, :] == i, :]
-            second = pcatrain_data[feature_vectors_full[0, :] == j, :]
-        d12 = divergence(first, second)
-        divergences.append(d12)
-        
+    # do nested for loop to get divergences between all pairs, append results to array
+    for i in range (1,27):
+        for j in range (1,27):
+            first = feature_vectors_full[train_labels[:] == i, :]
+            second = feature_vectors_full[train_labels[:] == j, :]
+            if first.shape[0] <= 1 or second.shape[0] <= 1:
+                continue 
+            d12 = divergence(first, second)
+            divergences.append(d12)
+
+    # create vector of 40 zeros to store sorted indexes and sum values for divergence into sorted divergences vector
     sorted_indexes = np.zeros(40)
     for index in divergences:
         sorted_indexes += index
 
+    # sort the divergences and print the top 2-11 features
     sorted_indexes = np.argsort(-sorted_indexes)
-    features = sorted_indexes[1:11]
+    features = sorted_indexes[0:10]
     
-    return feature_vectors_full[:, 0:10]
-
+    return features
 
 def get_bounding_box_size(images):
     """Compute bounding box size given list of images."""
     height = max(image.shape[0] for image in images)
     width = max(image.shape[1] for image in images)
     return height, width
-
 
 def images_to_feature_vectors(images, bbox_size=None):
     """Reformat characters into feature vectors.
@@ -111,11 +125,6 @@ def images_to_feature_vectors(images, bbox_size=None):
         fvectors[i, :] = padded_image.reshape(1, nfeatures)
     return fvectors
 
-
-# The three functions below this point are called by train.py
-# and evaluate.py and need to be provided.
-
-
 def process_training_data(train_page_names):
     """Perform the training stage and return results in a dictionary.
 
@@ -138,12 +147,22 @@ def process_training_data(train_page_names):
     model_data["labels_train"] = labels_train.tolist()
     model_data["bbox_size"] = bbox_size
 
+    # calculate the first 100 principal components and the mean 
+    # of the training data and input values into the model
+    print("Inputting principal components and mean into model")
+    principal_components = calculate_principal_components(fvectors_train_full, 50)
+    model_data["principal_components"] = principal_components.tolist()
+
+    mean = np.mean(fvectors_train_full)
+    model_data["mean"] = mean.tolist()
+
     print("Reducing to 10 dimensions")
-    fvectors_train = reduce_dimensions(fvectors_train_full, model_data)
+    reconstructed_fvectors = np.dot((fvectors_train_full - np.mean(fvectors_train_full)), principal_components)
+    features = reduce_dimensions(reconstructed_fvectors, model_data)
+    model_data["features"] = features.tolist()
+    model_data["fvectors_train"] = reconstructed_fvectors[:, features].tolist()
 
-    model_data["fvectors_train"] = fvectors_train.tolist()
     return model_data
-
 
 def load_test_page(page_name, model):
     """Load test data page.
@@ -158,10 +177,39 @@ def load_test_page(page_name, model):
     bbox_size = model["bbox_size"]
     images_test = utils.load_char_images(page_name)
     fvectors_test = images_to_feature_vectors(images_test, bbox_size)
-    # Perform the dimensionality reduction.
-    fvectors_test_reduced = reduce_dimensions(fvectors_test, model)
+
+    # Perform the reconstruction
+    features = np.array(model["features"])
+    principal_components = np.array(model["principal_components"])
+    mean = np.array(model["mean"])
+    
+    # Get the feature vectors corresponding to the best features found from doing feature selection
+    fvectors_test_reduced = np.dot((fvectors_test - mean), principal_components)[:,features]
+
     return fvectors_test_reduced
 
+def classify(train, train_labels, test, features=None):
+    """Perform nearest neighbour classification - taken from lab 6/7"""
+
+    # Use all feature is no feature parameter has been supplied
+    if features is None:
+        features=np.arange(0, train.shape[1])
+
+    # Select the desired features from the training and test data
+    train = train[:, features]
+    test = test[:, features]
+    
+    # Super compact implementation of nearest neighbour 
+    x=np.dot(test, train.transpose())
+    modtest=np.sqrt(np.sum(test * test, axis=1))
+    modtrain=np.sqrt(np.sum(train * train, axis=1))
+    dist=x / np.outer(modtest, modtrain.transpose()) # cosine distance
+    nearest=np.argmax(dist, axis=1)
+
+    # Label returned using the nearest neighbour classification
+    label = train_labels[0, nearest]
+
+    return label
 
 def classify_page(page, model):
     """Dummy classifier. Always returns first label.
@@ -174,8 +222,7 @@ def classify_page(page, model):
     fvectors_train = np.array(model["fvectors_train"])
     labels_train = np.array(model["labels_train"])
     
-    return np.repeat(labels_train[0], len(page))
-
+    return classify(fvectors_train, np.expand_dims(labels_train, axis=0), page)
 
 def correct_errors(page, labels, bboxes, model):
     """Dummy error correction. Returns labels unchanged.
