@@ -14,12 +14,13 @@ import utils.utils as utils
 import scipy.linalg
 
 def divergence(class1, class2):
-    """compute a vector of 1-D divergences
-    
+    """Compute a vector of 1-D divergences - taken from lab 6/7
+    Params:
     class1 - data matrix for class 1, each row is a sample
     class2 - data matrix for class 2
     
-    returns: d12 - a vector of 1-D divergence scores
+    Returns: 
+    d12 - a vector of 1-D divergence scores
     """
 
     # Compute the mean and variance of each feature vector element
@@ -36,31 +37,37 @@ def divergence(class1, class2):
 
     return d12
 
-def calculate_principal_components(train_data, countPC):
-    """Method to calculate the the principal components
+def calculate_principal_components(train_data, numPC):
+    """Method to calculate the the principal components - taken from lab 6/7
 
     Params:
     train_data - training data feature vectors stored as 
         rows in a matrix
-    countPC - number of principal components to
+    countPC - number of principal components to compute 
+
+    Returns:
+    v - principal componeents stored in a vector
     """
     
-    # computing the principal components of the first 40 components
+    # computing the principal components of the first numPC components
     covx = np.cov(train_data, rowvar=0)
     N = covx.shape[0]
-    w, v = scipy.linalg.eigh(covx, eigvals=(N - countPC, N - 1))
+    w, v = scipy.linalg.eigh(covx, eigvals=(N - numPC, N - 1))
     v = np.fliplr(v)
 
     return v
 
 def reduce_dimensions(feature_vectors_full, model):
-    """Reduces the dimensions by finding the 10 best features.
+    """Reduces the dimensions by finding the 10 best features
 
     Params:
     feature_vectors_full - feature vectors stored as rows
        in a matrix
     model - a dictionary storing the outputs of the model
        training stage
+
+    Returns:
+    features - 10 best features obtained in dimensionality reduction
     """
     # extract training labels from the model
     train_labels = np.array(model["labels_train"])
@@ -79,12 +86,14 @@ def reduce_dimensions(feature_vectors_full, model):
             d12 = divergence(first, second)
             divergences.append(d12)
 
-    # create vector of 40 zeros to store sorted indexes and sum values for divergence into sorted divergences vector
-    sorted_indexes = np.zeros(40)
+    # create vector of 10 zeros to store sorted indexes 
+    sorted_indexes = np.zeros(10)
+
+    # sum values for divergence into sorted divergences vector
     for index in divergences:
         sorted_indexes += index
 
-    # sort the divergences and print the top 2-11 features
+    # sort the divergences and print the top 10 features
     sorted_indexes = np.argsort(-sorted_indexes)
     features = sorted_indexes[0:10]
     
@@ -147,20 +156,22 @@ def process_training_data(train_page_names):
     model_data["labels_train"] = labels_train.tolist()
     model_data["bbox_size"] = bbox_size
 
-    # calculate the first 100 principal components and the mean 
+    # calculate the first 50 principal components and the mean 
     # of the training data and input values into the model
     print("Inputting principal components and mean into model")
     principal_components = calculate_principal_components(fvectors_train_full, 50)
     model_data["principal_components"] = principal_components.tolist()
-
     mean = np.mean(fvectors_train_full)
     model_data["mean"] = mean.tolist()
 
     print("Reducing to 10 dimensions")
-    reconstructed_fvectors = np.dot((fvectors_train_full - np.mean(fvectors_train_full)), principal_components)
-    features = reduce_dimensions(reconstructed_fvectors, model_data)
+    # calculate best features from project training feature vectors (pcatrain_data) and input into model
+    pcatrain_data = np.dot((fvectors_train_full - np.mean(fvectors_train_full)), principal_components)
+    features = reduce_dimensions(pcatrain_data, model_data)
     model_data["features"] = features.tolist()
-    model_data["fvectors_train"] = reconstructed_fvectors[:, features].tolist()
+
+    # find feature vectors corresponding to the best features in pcatrain_data and input into model
+    model_data["fvectors_train"] = pcatrain_data[:, features].tolist()
 
     return model_data
 
@@ -182,14 +193,21 @@ def load_test_page(page_name, model):
     features = np.array(model["features"])
     principal_components = np.array(model["principal_components"])
     mean = np.array(model["mean"])
-    
+
     # Get the feature vectors corresponding to the best features found from doing feature selection
-    fvectors_test_reduced = np.dot((fvectors_test - mean), principal_components)[:,features]
+    pcatest_data = np.dot((fvectors_test - mean), principal_components)
+    fvectors_test_reduced = pcatest_data[:, features]
 
     return fvectors_test_reduced
 
 def classify(train, train_labels, test, features=None):
-    """Perform nearest neighbour classification - taken from lab 6/7"""
+    """Perform nearest neighbour classification - taken from lab 6/7
+    Params:
+    train - training data feature vector stores in rows as a matrix
+    train_labels - training labels for the training data
+    test - test data feature vector stores in rows as a matrix
+    features - features, if none provided, all of them are used
+    """
 
     # Use all feature is no feature parameter has been supplied
     if features is None:
@@ -212,23 +230,21 @@ def classify(train, train_labels, test, features=None):
     return label
 
 def classify_page(page, model):
-    """Dummy classifier. Always returns first label.
+    """Classify the page using the classify method
 
-    parameters:
-
+    Params:
     page - matrix, each row is a feature vector to be classified
     model - dictionary, stores the output of the training stage
     """
     fvectors_train = np.array(model["fvectors_train"])
-    labels_train = np.array(model["labels_train"])
+    labels_train = (np.array(model["labels_train"]))[np.newaxis]
     
-    return classify(fvectors_train, np.expand_dims(labels_train, axis=0), page)
+    return classify(fvectors_train, labels_train, page)
 
 def correct_errors(page, labels, bboxes, model):
     """Dummy error correction. Returns labels unchanged.
 
-    parameters:
-
+    Params:
     page - 2d array, each row is a feature vector to be classified
     labels - the output classification label for each feature vector
     bboxes - 2d array, each row gives the 4 bounding box coords of the character
