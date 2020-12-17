@@ -37,6 +37,19 @@ def divergence(class1, class2):
 
     return d12
 
+def load_wordlist(wordlist_filename):
+    """Import wordlist text file - used word list: http://www.mieliestronk.com/corncob_lowercase.txt
+    """
+    # load the wordlist from the file
+    print ("Loading word list from file...")
+    wordlist = list()
+    with open(wordlist_filename) as f:
+        for line in f:
+            wordlist.append(line.rstrip('\n'))
+    print (" ", len(wordlist), "words loaded.")
+
+    return wordlist
+
 def calculate_principal_components(train_data, numPC):
     """Method to calculate the the principal components - taken from lab 6/7
 
@@ -165,7 +178,7 @@ def process_training_data(train_page_names):
     model_data["mean"] = mean.tolist()
 
     print("Reducing to 10 dimensions")
-    # calculate best features from project training feature vectors (pcatrain_data) and input into model
+    # calculate best features from projected training feature vectors (pcatrain_data) and input into model
     pcatrain_data = np.dot((fvectors_train_full - np.mean(fvectors_train_full)), principal_components)
     features = reduce_dimensions(pcatrain_data, model_data)
     model_data["features"] = features.tolist()
@@ -173,6 +186,10 @@ def process_training_data(train_page_names):
     # find feature vectors corresponding to the best features in pcatrain_data and input into model
     pcatrain_data_features = pcatrain_data[:, features]
     model_data["fvectors_train"] = pcatrain_data_features.tolist()
+
+    # load and input the wordlist into the model
+    wordlist = load_wordlist("wordlist.txt")
+    model_data["wordlist"] = wordlist
 
     return model_data
 
@@ -238,9 +255,9 @@ def classify_page(page, model):
     model - dictionary, stores the output of the training stage
     """
     fvectors_train = np.array(model["fvectors_train"])
-    labels_train = (np.array(model["labels_train"]))[np.newaxis]
+    labels_train = (np.array(model["labels_train"]))
     
-    return classify(fvectors_train, labels_train, page)
+    return classify(fvectors_train, labels_train[np.newaxis], page)
 
 def correct_errors(page, labels, bboxes, model):
     """Dummy error correction. Returns labels unchanged.
@@ -251,4 +268,6 @@ def correct_errors(page, labels, bboxes, model):
     bboxes - 2d array, each row gives the 4 bounding box coords of the character
     model - dictionary, stores the output of the training stage
     """
+
+
     return labels
