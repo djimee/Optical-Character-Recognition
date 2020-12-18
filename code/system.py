@@ -12,6 +12,7 @@ version: v1.0
 import numpy as np
 import utils.utils as utils
 import scipy.linalg
+from scipy import ndimage
 
 def divergence(class1, class2):
     """Compute a vector of 1-D divergences - taken from lab 6/7
@@ -22,7 +23,6 @@ def divergence(class1, class2):
     Returns: 
     d12 - a vector of 1-D divergence scores
     """
-
     # Compute the mean and variance of each feature vector element
     m1 = np.mean(class1, axis=0)
     m2 = np.mean(class2, axis=0)
@@ -38,7 +38,10 @@ def divergence(class1, class2):
     return d12
 
 def load_wordlist(wordlist_filename):
-    """Import wordlist text file - used word list: http://www.mieliestronk.com/corncob_lowercase.txt
+    """Referencing for wordlist and processing:
+
+    Import wordlist text file - used word list: http://www.mieliestronk.com/corncob_lowercase.txt
+    Function adapted from: https://stackoverflow.com/questions/29666126/how-to-load-a-word-list-into-python
     """
     # load the wordlist from the file
     print ("Loading word list from file...")
@@ -46,11 +49,11 @@ def load_wordlist(wordlist_filename):
     with open(wordlist_filename) as f:
         for line in f:
             wordlist.append(line.rstrip('\n'))
-    print (" ", len(wordlist), "words loaded.")
+    print (len(wordlist), "words loaded")
 
     return wordlist
 
-def calculate_principal_components(train_data, numPC):
+def calculate_eigenvectors(train_data, numPC):
     """Method to calculate the the principal components - taken from lab 6/7
 
     Params:
@@ -61,7 +64,6 @@ def calculate_principal_components(train_data, numPC):
     Returns:
     v - principal componeents stored in a vector
     """
-    
     # computing the principal components of the first numPC components
     covx = np.cov(train_data, rowvar=0)
     N = covx.shape[0]
@@ -85,15 +87,16 @@ def reduce_dimensions(feature_vectors_full, model):
     # extract training labels from the model
     train_labels = np.array(model["labels_train"])
 
-    # feature selection algorithm
-    divergences = []
-    sorted_indexes = []
+    # get list of letters/symbols from the training labels and remove any duplicates
+    letters_list = train_labels 
+    letters_list = list(dict.fromkeys(letters_list))
 
-    # do nested for loop to get divergences between all pairs, append results to array
-    for i in range (1,27):
-        for j in range (1,27):
-            first = feature_vectors_full[train_labels[:] == i, :]
-            second = feature_vectors_full[train_labels[:] == j, :]
+    # FEATURE SELCTION - do nested for loop to get divergences between all pairs, append results to array
+    divergences = []
+    for i in letters_list:
+        first = feature_vectors_full[train_labels == i, :]
+        for j in letters_list:
+            second = feature_vectors_full[train_labels == j, :]
             if first.shape[0] <= 1 or second.shape[0] <= 1:
                 continue 
             d12 = divergence(first, second)
@@ -116,6 +119,7 @@ def get_bounding_box_size(images):
     """Compute bounding box size given list of images."""
     height = max(image.shape[0] for image in images)
     width = max(image.shape[1] for image in images)
+
     return height, width
 
 def images_to_feature_vectors(images, bbox_size=None):
@@ -129,7 +133,6 @@ def images_to_feature_vectors(images, bbox_size=None):
     images - a list of images stored as arrays
     bbox_size - an optional fixed bounding box size for each image
     """
-
     # If no bounding box size is supplied then compute a suitable
     # bounding box by examining sizes of the supplied images.
     if bbox_size is None:
@@ -137,14 +140,37 @@ def images_to_feature_vectors(images, bbox_size=None):
 
     bbox_h, bbox_w = bbox_size
     nfeatures = bbox_h * bbox_w
-    fvectors = np.empty((len(images), nfeatures))
-    for i, image in enumerate(images):
+
+    """ Referencing for multidimensional image processing:
+
+    Filters found on: https://docs.scipy.org/doc/scipy/reference/ndimage.html
+    Found how to use multidimensional image processing on: 
+    https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.median_filter.html#scipy.ndimage.median_filter
+    """
+    # apply multidimensional image filtering on the images - from testing other options from scipy.ndimage
+    # I found that median filtering was the best option
+    nd_images = []
+    for image in images:
+        nd_images.append(ndimage.median_filter(image, size=3))
+
+    # max and min nd image filters were also tested, but gave a much worse result than median filtering
+    """
+    for image in images:
+        nd_images.append(ndimage.maximum_filter(image, size=3))
+            
+    for image in images:
+        nd_images.append(ndimage.maximum_filter(image, size=3))
+    """
+    fvectors = np.empty((len(nd_images), nfeatures))
+
+    for i, image in enumerate(nd_images):
         padded_image = np.ones(bbox_size) * 255
         h, w = image.shape
         h = min(h, bbox_h)
         w = min(w, bbox_w)
         padded_image[0:h, 0:w] = image[0:h, 0:w]
         fvectors[i, :] = padded_image.reshape(1, nfeatures)
+
     return fvectors
 
 def process_training_data(train_page_names):
@@ -169,17 +195,17 @@ def process_training_data(train_page_names):
     model_data["labels_train"] = labels_train.tolist()
     model_data["bbox_size"] = bbox_size
 
-    # calculate the first 50 principal components and the mean 
+    # calculate the first 10 eigenvectros and the mean 
     # of the training data and input values into the model
     print("Inputting principal components and mean into model")
-    principal_components = calculate_principal_components(fvectors_train_full, 50)
-    model_data["principal_components"] = principal_components.tolist()
+    eigenvectors = calculate_eigenvectors(fvectors_train_full, 10)
+    model_data["eigenvectors"] = eigenvectors.tolist()
     mean = np.mean(fvectors_train_full)
     model_data["mean"] = mean.tolist()
 
     print("Reducing to 10 dimensions")
     # calculate best features from projected training feature vectors (pcatrain_data) and input into model
-    pcatrain_data = np.dot((fvectors_train_full - np.mean(fvectors_train_full)), principal_components)
+    pcatrain_data = np.dot((fvectors_train_full - np.mean(fvectors_train_full)), eigenvectors)
     features = reduce_dimensions(pcatrain_data, model_data)
     model_data["features"] = features.tolist()
 
@@ -209,11 +235,11 @@ def load_test_page(page_name, model):
 
     # Perform the reconstruction
     features = np.array(model["features"])
-    principal_components = np.array(model["principal_components"])
+    eigenvectors = np.array(model["eigenvectors"])
     mean = np.array(model["mean"])
 
     # Get the feature vectors corresponding to the best features found from doing feature selection
-    pcatest_data = np.dot((fvectors_test - mean), principal_components)
+    pcatest_data = np.dot((fvectors_test - mean), eigenvectors)
     fvectors_test_reduced = pcatest_data[:, features]
 
     return fvectors_test_reduced
@@ -226,7 +252,6 @@ def classify(train, train_labels, test, features=None):
     test - test data feature vector stores in rows as a matrix
     features - features, if none provided, all of them are used
     """
-
     # Use all feature is no feature parameter has been supplied
     if features is None:
         features=np.arange(0, train.shape[1])
@@ -255,19 +280,16 @@ def classify_page(page, model):
     model - dictionary, stores the output of the training stage
     """
     fvectors_train = np.array(model["fvectors_train"])
-    labels_train = (np.array(model["labels_train"]))
+    labels_train = np.array(model["labels_train"])[np.newaxis]
     
-    return classify(fvectors_train, labels_train[np.newaxis], page)
+    return classify(fvectors_train, labels_train, page)
 
 def correct_errors(page, labels, bboxes, model):
     """Dummy error correction. Returns labels unchanged.
-
     Params:
     page - 2d array, each row is a feature vector to be classified
     labels - the output classification label for each feature vector
     bboxes - 2d array, each row gives the 4 bounding box coords of the character
     model - dictionary, stores the output of the training stage
     """
-
-
     return labels
