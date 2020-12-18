@@ -1,14 +1,3 @@
-"""Dummy classification system.
-
-Skeleton code for a assignment solution.
-
-To make a working solution you will need to rewrite parts
-of the code below. In particular, the functions
-reduce_dimensions and classify_page currently have
-dummy implementations that do not do anything useful.
-
-version: v1.0
-"""
 import numpy as np
 import utils.utils as utils
 import scipy.linalg
@@ -54,15 +43,12 @@ def load_wordlist(wordlist_filename):
     return wordlist
 
 def calculate_eigenvectors(train_data, numPC):
-    """Method to calculate the the principal components - taken from lab 6/7
+    """Method to calculate the the eigenvectors - taken from lab 6/7
 
     Params:
     train_data - training data feature vectors stored as 
         rows in a matrix
-    countPC - number of principal components to compute 
-
-    Returns:
-    v - principal componeents stored in a vector
+    countPC - number of principal component aexes to compute 
     """
     # computing the principal components of the first numPC components
     covx = np.cov(train_data, rowvar=0)
@@ -80,9 +66,6 @@ def reduce_dimensions(feature_vectors_full, model):
        in a matrix
     model - a dictionary storing the outputs of the model
        training stage
-
-    Returns:
-    features - 10 best features obtained in dimensionality reduction
     """
     # extract training labels from the model
     train_labels = np.array(model["labels_train"])
@@ -153,7 +136,7 @@ def images_to_feature_vectors(images, bbox_size=None):
     for image in images:
         nd_images.append(ndimage.median_filter(image, size=3))
 
-    # max and min nd image filters were also tested, but gave a much worse result than median filtering
+    # max and min nd image filters were also tested below, but gave a much worse result than median filtering
     """
     for image in images:
         nd_images.append(ndimage.maximum_filter(image, size=3))
@@ -197,7 +180,7 @@ def process_training_data(train_page_names):
 
     # calculate the first 10 eigenvectros and the mean 
     # of the training data and input values into the model
-    print("Inputting principal components and mean into model")
+    print("Calculating and inputting eigenvector values and mean into model")
     eigenvectors = calculate_eigenvectors(fvectors_train_full, 10)
     model_data["eigenvectors"] = eigenvectors.tolist()
     mean = np.mean(fvectors_train_full)
@@ -284,12 +267,47 @@ def classify_page(page, model):
     
     return classify(fvectors_train, labels_train, page)
 
+
 def correct_errors(page, labels, bboxes, model):
-    """Dummy error correction. Returns labels unchanged.
+    """Method that checks for errors in words and amends them:
+
     Params:
     page - 2d array, each row is a feature vector to be classified
     labels - the output classification label for each feature vector
     bboxes - 2d array, each row gives the 4 bounding box coords of the character
     model - dictionary, stores the output of the training stage
+    """
+
+    """ UNFINISHED ERROR CORRECTION METHOD
+    word_lengths = []
+    length_counter = 0
+
+    # increment the length of word counter per iteration
+    for i in range(bboxes[0]):
+        length_counter += 1 
+        # if the absolute distance between x1 of a word and x2 of the next is greater than 10, it is a new word
+        # append the length of the word into the word lengths list
+        if abs(bboxes[i][0] - bboxes[i+1][3]) > 10: # abs(x1 - x2 (of next word)) was typically > 10, looking at the bbox values
+            word_lengths.append(length_counter) 
+            length_counter = 0
+        continue
+
+    # increment through labels and word lengths, add labels to output_words by looking at the word lengths to 
+    # find where words start and finish
+    output_words = []
+    for i in range(len(labels)):
+        for j in range(word_lengths[0]):
+            output_words.append((labels[j]))
+            word_lengths.pop(0)
+
+    # remove all words with less than 4 characters in output_words
+    output_words = [word for word in output_words if len(word) >= 4]
+
+    # iterate through all of the words, if the word is not in the word list with more than 4 characters
+    # check which letter is off, then try and amend that word
+    for word in wordlist:
+        if word not in wordlist:
+    
+    correct_labels = []
     """
     return labels
